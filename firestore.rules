@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Custom function to check user role
+    function getUserRole() {
+      return get(/databases/$(database)/documents/staffs/$(request.auth.uid)).data.role;
+    }
+    
+    function isAdmin() {
+      return getUserRole() == 'admin';
+    }
+    
+    function isStaffOrAdmin() {
+      return getUserRole() in ['staff', 'admin'];
+    }
+
+    // Staffs - any authenticated user can read staff directory,
+    // only admin can create/update staff docs
+    match /staffs/{staffId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && isAdmin();
+      allow delete: if request.auth != null && isAdmin();
+    }
+
+    // Parcels - staff and admin can create/update; authenticated can read
+    match /parcels/{parcelId} {
+      allow create: if request.auth != null && isStaffOrAdmin();
+      allow update: if request.auth != null && isStaffOrAdmin();
+      allow read: if request.auth != null;
+      allow delete: if request.auth != null && isAdmin();
+    }
+
+    // Ledger - staff and admin only
+    match /ledger/{txnId} {
+      allow read, write: if request.auth != null && isStaffOrAdmin();
+    }
+
+    // Wallets - owner or admin
+    match /wallets/{uid} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == uid || isAdmin());
+    }
+
+    // Destinations - anyone authenticated can read, only admin can write
+    match /destinations/{id} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isAdmin();
+    }
+  }
+}
