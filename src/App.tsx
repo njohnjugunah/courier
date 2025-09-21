@@ -1,10 +1,12 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
+import { useAuthState } from 'react-firebase-hooks/auth'
+import { auth } from './firebase/firebaseClient'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Header } from './components/Header'
 import { SmoothPageTransition } from './components/SmoothPageTransition'
 
-// Pages - Fix imports to use default exports
+// Pages
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import ParcelsList from './pages/ParcelsList'
@@ -16,6 +18,12 @@ import AdminDestinations from './pages/AdminDestinations'
 import AdminStaff from './pages/AdminStaff'
 
 function App() {
+  const [user, loading] = useAuthState(auth)
+
+  if (loading) {
+    return <div className="flex justify-center items-center h-screen">Loading...</div>
+  }
+
   return (
     <Router>
       <div className="min-h-screen bg-background">
@@ -32,7 +40,10 @@ function App() {
                       <SmoothPageTransition>
                         <Routes>
                           <Route path="/" element={<Navigate to="/dashboard" />} />
-                          <Route path="/dashboard" element={<Dashboard />} />
+                          <Route
+                            path="/dashboard"
+                            element={<Dashboard userUid={user ? user.uid : null} />}
+                          />
                           <Route path="/parcels" element={<ParcelsList />} />
                           <Route path="/parcels/new" element={<ParcelCreate />} />
                           <Route path="/parcels/:id" element={<ParcelDetail />} />
