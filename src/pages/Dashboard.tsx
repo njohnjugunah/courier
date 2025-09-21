@@ -1,26 +1,23 @@
 // src/pages/Dashboard.tsx
 
-import React, { useEffect, useState } from "react";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
-import { db } from "@/firebase/firebaseClient"; // adjust path if needed
-import { Loader2 } from "lucide-react"; // only import icons you actually use
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { 
+  Package, 
+  Wallet, 
+  FileText, 
+  Plus, 
+  TrendingUp,
+  Clock,
+  CheckCircle,
+  Truck
+} from 'lucide-react';
+import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth, db } from '@/firebase/firebaseClient';
 
-// --- Types ---
-interface Parcel {
-  id: string;
-  status: "pending" | "in_transit" | "delivered";
-  createdDate: string;
-  // add other fields from Firestore if needed
-}
-
-interface Wallet {
-  id: string;
-  uid: string;
-  balance: number;
-  // add other fields if needed
-}
-
-interface Stats {
+interface DashboardStats {
   totalParcels: number;
   pendingParcels: number;
   inTransitParcels: number;
@@ -28,98 +25,267 @@ interface Stats {
   walletBalance: number;
 }
 
-// --- Component ---
-const Dashboard: React.FC<{ userUid: string | null }> = ({ userUid }) => {
-  const [stats, setStats] = useState<Stats>({
+interface Parcel {
+  id: string;
+  createdBy: string;
+  status: 'pending' | 'in_transit' | 'delivered';
+  trackingCode: string;
+  senderName: string;
+  recipientName: string;
+  createdAt: any; // Firestore timestamp
+}
+
+interface Wallet {
+  id: string;
+  uid: string;
+  balance: number;
+}
+
+const Dashboard: React.FC = () => {
+  const [user] = useAuthState(auth);
+  const [stats, setStats] = useState<DashboardStats>({
     totalParcels: 0,
     pendingParcels: 0,
     inTransitParcels: 0,
     deliveredParcels: 0,
-    walletBalance: 0,
+    walletBalance: 0
   });
-
   const [recentParcels, setRecentParcels] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // --- Fetch dashboard data ---
-  const fetchDashboardData = async (uid: string) => {
-    try {
-      setLoading(true);
-
-      // --- Fetch parcels ---
-      const parcelsRef = collection(db, "parcels");
-      const parcelsQuery = query(parcelsRef, orderBy("createdDate", "desc"));
-      const parcelsSnapshot = await getDocs(parcelsQuery);
-
-      const parcelsData: Parcel[] = parcelsSnapshot.docs.map((doc) => {
-        const data = doc.data() as Parcel;
-        const { id: _omit, ...rest } = data; // omit id from Firestore if exists
-        return { id: doc.id, ...rest };
-      });
-
-      const totalParcels = parcelsData.length;
-      const pendingParcels = parcelsData.filter((p) => p.status === "pending").length;
-      const inTransitParcels = parcelsData.filter((p) => p.status === "in_transit").length;
-      const deliveredParcels = parcelsData.filter((p) => p.status === "delivered").length;
-
-      // --- Fetch wallet ---
-      const walletRef = collection(db, "wallets");
-      const walletQuery = query(walletRef, where("uid", "==", uid));
-      const walletSnapshot = await getDocs(walletQuery);
-
-      const walletData: Wallet | undefined = walletSnapshot.docs[0]
-        ? (() => {
-            const data = walletSnapshot.docs[0].data() as Wallet;
-            const { id: _omit, ...rest } = data;
-            return { id: walletSnapshot.docs[0].id, ...rest };
-          })()
-        : undefined;
-
-      const walletBalance = walletData?.balance ?? 0;
-
-      // --- Update state ---
-      setStats({ totalParcels, pendingParcels, inTransitParcels, deliveredParcels, walletBalance });
-      setRecentParcels(parcelsData.slice(0, 5));
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- useEffect to fetch data on mount ---
   useEffect(() => {
-    if (!userUid) return;
-    fetchDashboardData(userUid);
-  }, [userUid]);
+    const fetchDashboardData = async () => {
+      if (!user) return;
 
-  // --- Loading state ---
+      try {
+        // --- Fetch parcels ---
+        const parcelsQuery = query(
+          collection(db, 'parcels'),
+          where('createdBy', '==', user.uid),
+          orderBy('createdAt', 'desc')
+        );
+        const parcelsSnapshot = await getDocs(parcelsQuery);
+        const parcelsData: Parcel[] = parcelsSnapshot.docs.map(doc => {
+          const data = doc.data() as Omit<Parcel, 'id'>;
+          return { id: doc.id, ...data };
+        });
+
+        const totalParcels = parcelsData.length;
+        const pendingParcels = parcelsData.filter(p => p.status === 'pending').length;
+        const inTransitParcels = parcelsData.filter(p => p.status === 'in_transit').length;
+        const deliveredParcels = parcelsData.filter(p => p.status === 'delivered').length;
+
+        // --- Fetch wallet ---
+        const walletQuery = query(collection(db, 'wallets'), where('uid', '==', user.uid));
+        const walletSnapshot = await getDocs(walletQuery);
+        const walletData: Wallet | undefined = walletSnapshot.docs[0]
+          ? (() => {
+              const data = walletSnapshot.docs[0].data() as Omit<Wallet, 'id'>;
+              return { id: walletSnapshot.docs[0].id, ...data };
+            })()
+          : undefined;
+
+        const walletBalance = walletData?.balance ?? 0;
+
+        setStats({ totalParcels, pendingParcels, inTransitParcels, deliveredParcels, walletBalance });
+        setRecentParcels(parcelsData.slice(0, 5));
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [user]);
+
+  const StatCard = ({ icon: Icon, title, value, color, link }: any) => (
+    <Link to={link}>
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className={`card hover:shadow-lg cursor-pointer border-l-4 ${color}`}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-gray-600 text-sm font-medium">{title}</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+          </div>
+          <div className={`p-3 rounded-xl bg-opacity-10 ${color.replace('border-', 'bg-')}`}>
+            <Icon className={`h-6 w-6 ${color.replace('border-', 'text-')}`} />
+          </div>
+        </div>
+      </motion.div>
+    </Link>
+  );
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-full">
-        <Loader2 className="animate-spin" />
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="card h-24 bg-gray-200"></div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4">
-      <h2>Total Parcels: {stats.totalParcels}</h2>
-      <h2>Pending: {stats.pendingParcels}</h2>
-      <h2>In Transit: {stats.inTransitParcels}</h2>
-      <h2>Delivered: {stats.deliveredParcels}</h2>
-      <h2>Wallet Balance: {stats.walletBalance}</h2>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600 mt-1">Welcome back! Here's your overview.</p>
+        </div>
+        <Link to="/parcels/new">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Parcel</span>
+          </motion.button>
+        </Link>
+      </div>
 
-      <h3 className="mt-4">Recent Parcels:</h3>
-      <ul>
-        {recentParcels.map((parcel) => (
-          <li key={parcel.id}>
-            {parcel.id} - {parcel.status}
-          </li>
-        ))}
-      </ul>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          icon={Package}
+          title="Total Parcels"
+          value={stats.totalParcels}
+          color="border-primary"
+          link="/parcels"
+        />
+        <StatCard
+          icon={Clock}
+          title="Pending"
+          value={stats.pendingParcels}
+          color="border-yellow-500"
+          link="/parcels?status=pending"
+        />
+        <StatCard
+          icon={Truck}
+          title="In Transit"
+          value={stats.inTransitParcels}
+          color="border-blue-500"
+          link="/parcels?status=in_transit"
+        />
+        <StatCard
+          icon={CheckCircle}
+          title="Delivered"
+          value={stats.deliveredParcels}
+          color="border-green-500"
+          link="/parcels?status=delivered"
+        />
+      </div>
+
+      {/* Recent Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Parcels */}
+        <div className="lg:col-span-2">
+          <div className="card">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900">Recent Parcels</h2>
+              <Link to="/parcels" className="text-primary hover:text-primary/80 font-medium">
+                View All
+              </Link>
+            </div>
+            
+            {recentParcels.length > 0 ? (
+              <div className="space-y-4">
+                {recentParcels.map((parcel) => (
+                  <motion.div
+                    key={parcel.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3">
+                        <div className="font-semibold text-gray-900">
+                          {parcel.trackingCode}
+                        </div>
+                        <span className={`status-${parcel.status}`}>
+                          {parcel.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 text-sm mt-1">
+                        {parcel.senderName} → {parcel.recipientName}
+                      </p>
+                    </div>
+                    <Link
+                      to={`/parcels/${parcel.id}`}
+                      className="text-primary hover:text-primary/80 font-medium"
+                    >
+                      View
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">No parcels yet</p>
+                <Link to="/parcels/new" className="text-primary hover:text-primary/80 font-medium">
+                  Create your first parcel
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Wallet Summary */}
+        <div className="space-y-6">
+          <div className="card">
+            <div className="text-center">
+              <Wallet className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Wallet Balance</h3>
+              <p className="text-3xl font-bold text-primary">
+                KES {stats.walletBalance.toLocaleString()}
+              </p>
+              <Link
+                to="/wallet"
+                className="inline-block mt-4 text-primary hover:text-primary/80 font-medium"
+              >
+                View Details →
+              </Link>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="text-center">
+              <TrendingUp className="h-12 w-12 text-green-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Quick Stats</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Success Rate</span>
+                  <span className="font-semibold">
+                    {stats.totalParcels > 0 
+                      ? Math.round((stats.deliveredParcels / stats.totalParcels) * 100)
+                      : 0
+                    }%
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Active Parcels</span>
+                  <span className="font-semibold">
+                    {stats.pendingParcels + stats.inTransitParcels}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
 
 export default Dashboard;
+
