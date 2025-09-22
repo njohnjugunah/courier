@@ -1,19 +1,16 @@
-// src/pages/Dashboard.tsx
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Package, 
   Wallet, 
-  FileText, 
   Plus, 
   TrendingUp,
   Clock,
   CheckCircle,
   Truck
 } from 'lucide-react';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/firebase/firebaseClient';
 
@@ -32,7 +29,7 @@ interface Parcel {
   trackingCode: string;
   senderName: string;
   recipientName: string;
-  createdAt: any; // Firestore timestamp
+  createdAt: any;
 }
 
 interface Wallet {
